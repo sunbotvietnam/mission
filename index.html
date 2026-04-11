@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sunbot - Kiến tạo Việt Nam Xanh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Thư viện Pháo hoa (Confetti) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body {
+            user-select: none; -webkit-user-select: none; touch-action: none; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #E0F7FA;
+            background-image: url('background.png');
+            background-size: cover; background-position: center;
+        }
+
+        #rotate-overlay { display: none; }
+        @media screen and (orientation: portrait) {
+            #rotate-overlay { display: flex; }
+            #appBody { display: none !important; }
+        }
+
+        .btn-game { transition: all 0.1s ease-out; }
+        .btn-game:active { transform: translateY(4px); border-bottom-width: 0px !important; margin-top: 4px; }
+        .btn-game:disabled { opacity: 0.5; cursor: not-allowed; transform: none; border-bottom-width: 4px !important; margin-top: 0px; }
+
+        .cell-dark { background-color: #1a96a1; }
+        .cell-light { background-color: #8fd5e6; }
+
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8%); }
+        }
+        .animate-bounce-slow { animation: bounce-slow 1.5s infinite ease-in-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in forwards; }
+    </style>
+</head>
+<body class="w-full h-screen flex-row overflow-hidden text-slate-800" onpointerdown="unlockAudio()">
+
+    <!-- MÀN HÌNH ÉP XOAY NGANG -->
+    <div id="rotate-overlay" class="fixed inset-0 bg-emerald-600 z-[9999] flex-col items-center justify-center text-white p-6 text-center">
+        <svg class="w-24 h-24 mb-6 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 2v6h6M2 12A10 10 0 0 1 17 3.2L22 8M8 22v-6H2M22 12A10 10 0 0 1 7 20.8L2 16"></path></svg>
+        <h1 class="text-3xl font-black mb-4 uppercase">Xoay ngang màn hình</h1>
+        <p class="text-lg font-medium opacity-90">Vui lòng xoay ngang thiết bị để có không gian chơi tốt nhất!</p>
+    </div>
+
+    <!-- APP CHÍNH -->
+    <div id="appBody" class="w-full h-full flex flex-row relative bg-white/20 backdrop-blur-sm">
+
+        <!-- NÚT CÀI ĐẶT ẨN -->
+        <div class="absolute top-3 right-3 z-[60]">
+            <button id="btnSettingsToggle" class="p-2.5 bg-white/90 rounded-full shadow-md border-2 border-emerald-100 text-slate-500 hover:text-emerald-600 hover:bg-white transition-all active:scale-95">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+        </div>
+
+        <!-- BADGE ĐANG CHỈNH SỬA -->
+        <div id="editModeBadge" class="hidden absolute top-3 left-1/2 transform -translate-x-1/2 z-[60] bg-amber-400 text-amber-900 px-5 py-2 rounded-full font-black text-sm shadow-lg flex items-center gap-2 border-2 border-white cursor-pointer hover:bg-amber-500 animate-pulse" onclick="setMode('none')">
+            <span id="editModeText">Đang sửa bản đồ</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+
+        <!-- BẢNG CÀI ĐẶT GIÁO VIÊN (MODAL OVERLAY) -->
+        <div id="settingsOverlay" class="hidden absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-[90]"></div>
+        <div id="settingsPanel" class="hidden absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-3xl shadow-2xl border-4 border-emerald-200 z-[100] w-[95%] max-w-[420px]">
+            <div class="flex justify-between items-center mb-4 border-b-2 border-slate-100 pb-2">
+                <h3 class="font-black text-lg text-emerald-700 uppercase tracking-wide">Cài Đặt Giáo Viên</h3>
+                <button id="btnSettingsClose" class="text-slate-400 hover:text-red-500 bg-slate-100 hover:bg-slate-200 rounded-full p-1.5 transition-colors">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            
+            <!-- CÔNG CỤ VẼ BẢN ĐỒ -->
+            <div class="mb-4 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                <h4 class="font-black text-slate-400 mb-2 uppercase text-[11px] tracking-wider">1. Công cụ vẽ Bản Đồ</h4>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setMode('start')" class="py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 bg-amber-100 text-amber-700 border-2 border-amber-300 active:scale-95 transition-transform">📍 Đặt Bot</button>
+                    <button onclick="setMode('target')" class="py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 bg-rose-100 text-rose-700 border-2 border-rose-300 active:scale-95 transition-transform">🎯 Đặt Đích</button>
+                    <button onclick="setMode('obstacle')" class="py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 bg-slate-200 text-slate-700 border-2 border-slate-300 active:scale-95 transition-transform">🧱 Vật Cản</button>
+                    <button onclick="setMode('erase')" class="py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 bg-red-100 text-red-700 border-2 border-red-300 active:scale-95 transition-transform">🧹 Xóa</button>
+                </div>
+            </div>
+
+            <!-- CHỌN CHẶNG / ẢNH -->
+            <div>
+                <h4 class="font-black text-slate-400 mb-2 uppercase text-[11px] tracking-wider">2. Quản lý Chặng & Hình ảnh</h4>
+                
+                <div class="mb-3">
+                    <label class="block text-[13px] font-bold text-slate-600 mb-1">Chọn Đích muốn vẽ:</label>
+                    <div class="flex gap-2 items-center">
+                        <div class="flex gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                            <button onclick="selectTargetBrush(0)" id="btn-target-0" class="w-10 h-10 bg-white rounded-lg border-2 border-blue-500 overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="target-1.png" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-amber-50">1️⃣</div>
+                            </button>
+                            <button onclick="selectTargetBrush(1)" id="btn-target-1" class="w-10 h-10 bg-white rounded-lg border-2 border-transparent overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="target-2.png" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-amber-50">2️⃣</div>
+                            </button>
+                            <button onclick="selectTargetBrush(2)" id="btn-target-2" class="w-10 h-10 bg-white rounded-lg border-2 border-transparent overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="target-3.png" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-amber-50">3️⃣</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4 bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-inner">
+                    <label class="block text-[12px] font-black text-emerald-800 mb-1" id="lblRewardEdit">Nội dung thưởng cho Đích 1:</label>
+                    <input type="text" id="rewardTextInput" class="w-full px-3 py-2 rounded-lg border border-emerald-300 text-sm focus:outline-none focus:border-emerald-500 shadow-sm font-semibold text-slate-700" placeholder="Nhập câu khen ngợi trẻ..." onkeyup="saveRewardText()" />
+                    <p class="text-[10px] text-emerald-600 mt-1.5 italic font-medium">Hệ thống sẽ hiện kèm ảnh: <b id="lblRewardImg" class="text-rose-500">thuong-1.png</b></p>
+                </div>
+
+                <div class="mb-1">
+                    <label class="block text-[13px] font-bold text-slate-600 mb-1">Chọn Vật cản muốn vẽ:</label>
+                    <div class="flex gap-2 items-center">
+                        <div class="flex gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                            <button onclick="selectObstacleBrush(0)" id="btn-obstacle-0" class="w-10 h-10 bg-white rounded-lg border-2 border-blue-500 overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="obstacle-1.png" class="w-full h-full object-cover p-0.5" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-slate-200">🧱</div>
+                            </button>
+                            <button onclick="selectObstacleBrush(1)" id="btn-obstacle-1" class="w-10 h-10 bg-white rounded-lg border-2 border-transparent overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="obstacle-2.png" class="w-full h-full object-cover p-0.5" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-slate-200">🪨</div>
+                            </button>
+                            <button onclick="selectObstacleBrush(2)" id="btn-obstacle-2" class="w-10 h-10 bg-white rounded-lg border-2 border-transparent overflow-hidden relative transition-colors focus:outline-none">
+                                <img src="obstacle-3.png" class="w-full h-full object-cover p-0.5" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'" />
+                                <div class="hidden absolute inset-0 items-center justify-center text-xl bg-slate-200">🌵</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- CỘT TRÁI: BẢN ĐỒ & KHAY LỆNH -->
+        <div class="flex-1 min-w-0 h-full flex flex-col items-center justify-center p-3 lg:p-4 relative">
+            
+            <!-- TIÊU ĐỀ -->
+            <div class="shrink-0 bg-white/90 backdrop-blur-md px-6 py-2 mb-3 rounded-full border-4 border-emerald-100 text-emerald-600 font-black text-xl lg:text-2xl shadow-md tracking-wide uppercase z-10 text-center flex items-center gap-2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+                CÙNG SUNBOT - KIẾN TẠO VIỆT NAM XANH
+            </div>
+
+            <!-- BẢN ĐỒ -->
+            <div class="relative w-full max-w-full aspect-square flex-1 min-h-0 flex justify-center items-center mb-3">
+                <div class="relative h-full aspect-square shrink-0 rounded-2xl bg-white shadow-2xl border-[6px] border-white p-[2px]">
+                    <div class="relative w-full h-full rounded-xl overflow-hidden bg-slate-300 touch-none select-none">
+                        
+                        <!-- GRID CARO -->
+                        <div id="gridContainer" class="absolute inset-0 grid grid-cols-8 grid-rows-8 touch-none select-none"></div>
+
+                        <!-- LỚP VẼ ĐƯỜNG DỰ KIẾN (SKETCH) -->
+                        <svg id="sketchOverlay" class="absolute inset-0 w-full h-full pointer-events-none z-15" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <polyline id="sketchPolyline" points="" fill="none" stroke="#FFD700" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3, 5" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.8));" />
+                        </svg>
+
+                        <!-- SUNBOT OVERLAY -->
+                        <div id="sunbot" class="absolute z-20 pointer-events-none transition-all duration-[800ms] ease-in-out" style="width: 12.5%; height: 12.5%; left: 0%; bottom: 0%; transform: rotate(0deg);">
+                            <div class="w-full h-full p-0.5 flex items-center justify-center">
+                                <img src="logo-sunbot.png" alt="Sunbot" class="w-[95%] h-[95%] object-contain drop-shadow-xl" onerror="this.onerror=null; this.outerHTML='<div class=\'w-4/5 h-4/5 bg-yellow-400 rounded-full border-[3px] border-yellow-600 shadow-md flex items-center justify-center font-black text-white text-[10px]\'>BOT</div>';"/>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- KHAY LỆNH DỰ KIẾN -->
+            <div id="queueWrapper" class="w-full aspect-[8/1] max-w-full shrink-0 flex justify-center items-center">
+                <div class="h-full aspect-[8/1] bg-white rounded-2xl shadow-xl border-[4px] border-white flex flex-col p-[2px]">
+                    <div id="queueContainer" class="w-full h-full grid grid-cols-8 gap-[1px] bg-blue-200 rounded-xl overflow-hidden"></div>
+                </div>
+            </div>
+            
+            <div id="queueWrapper2" class="hidden w-full aspect-[8/1] max-w-full shrink-0 flex justify-center items-center mt-1.5">
+                <div class="h-full aspect-[8/1] bg-white rounded-2xl shadow-xl border-[4px] border-white flex flex-col p-[2px]">
+                    <div id="queueContainer2" class="w-full h-full grid grid-cols-8 gap-[1px] bg-blue-200 rounded-xl overflow-hidden"></div>
+                </div>
+            </div>
+            
+            <div id="queueWrapper3" class="hidden w-full aspect-[8/1] max-w-full shrink-0 flex justify-center items-center mt-1.5">
+                <div class="h-full aspect-[8/1] bg-white rounded-2xl shadow-xl border-[4px] border-white flex flex-col p-[2px]">
+                    <div id="queueContainer3" class="w-full h-full grid grid-cols-8 gap-[1px] bg-blue-200 rounded-xl overflow-hidden"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- CỘT PHẢI: ĐIỀU KHIỂN (D-PAD) -->
+        <div class="w-[200px] lg:w-[280px] h-full bg-white/90 backdrop-blur-md border-l-4 border-emerald-100 flex flex-col justify-center items-center p-4 lg:p-6 shadow-2xl shrink-0 touch-none z-20">
+            
+            <div class="relative w-full flex justify-center mb-6 mt-auto">
+                <div class="grid grid-cols-3 grid-rows-3 gap-2 lg:gap-3 w-fit relative z-10">
+                    <div></div>
+                    <button onclick="addCommand('F')" class="btn-game w-14 h-14 lg:w-[76px] lg:h-[76px] bg-blue-500 rounded-2xl border-b-4 border-blue-700 flex items-center justify-center text-white shadow-md outline-none">
+                        <svg viewBox="0 0 24 24" class="w-[65%] h-[65%]" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                    </button>
+                    <div></div>
+                    
+                    <button onclick="addCommand('L')" class="btn-game w-14 h-14 lg:w-[76px] lg:h-[76px] bg-blue-500 rounded-2xl border-b-4 border-blue-700 flex items-center justify-center text-white shadow-md outline-none">
+                        <svg viewBox="0 0 24 24" class="w-[65%] h-[65%]" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v3.5"/></svg>
+                    </button>
+                    
+                    <button id="btnPlay" onclick="executeCommands()" class="btn-game w-14 h-14 lg:w-[76px] lg:h-[76px] bg-emerald-500 rounded-full border-b-4 border-emerald-700 flex items-center justify-center text-white shadow-lg outline-none disabled:opacity-50 z-10">
+                        <svg id="iconPlay" viewBox="0 0 24 24" class="w-[60%] h-[60%] ml-1" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        <svg id="iconLoading" viewBox="0 0 24 24" class="w-[60%] h-[60%] animate-spin hidden" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    </button>
+                    
+                    <button onclick="addCommand('R')" class="btn-game w-14 h-14 lg:w-[76px] lg:h-[76px] bg-blue-500 rounded-2xl border-b-4 border-blue-700 flex items-center justify-center text-white shadow-md outline-none">
+                        <svg viewBox="0 0 24 24" class="w-[65%] h-[65%]" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5V18"/></svg>
+                    </button>
+                    
+                    <div></div>
+                    <button onclick="addCommand('B')" class="btn-game w-14 h-14 lg:w-[76px] lg:h-[76px] bg-blue-500 rounded-2xl border-b-4 border-blue-700 flex items-center justify-center text-white shadow-md outline-none">
+                        <svg viewBox="0 0 24 24" class="w-[65%] h-[65%] rotate-180" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                    </button>
+                    <div></div>
+                </div>
+            </div>
+
+            <div class="w-full mt-auto mb-2 lg:mb-4">
+                <button onclick="removeLastCommand()" id="btnTrash" class="btn-game w-full py-4 bg-rose-500 rounded-2xl border-b-4 border-rose-700 font-black text-lg lg:text-xl text-white flex items-center justify-center gap-2 outline-none disabled:opacity-50 shadow-md">
+                    <svg viewBox="0 0 24 24" class="w-6 h-6 lg:w-7 lg:h-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
+                    <span class="tracking-wider">XÓA LÙI</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL NHẬN PHẦN THƯỞNG KHI ĐẾN ĐÍCH -->
+    <div id="rewardModalOverlay" class="hidden absolute inset-0 z-50 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)] text-center max-w-md w-full border-8 border-emerald-400 transform scale-100 flex flex-col items-center">
+            <div class="w-56 h-56 mb-4 relative flex items-center justify-center">
+                <div class="absolute inset-0 bg-emerald-100 rounded-full animate-ping opacity-50"></div>
+                <img id="rewardModalImg" src="" class="w-full h-full object-contain drop-shadow-2xl z-10" onerror="this.onerror=null; this.src='target-1.png';"/>
+            </div>
+            <h2 id="rewardModalText" class="text-xl font-black mb-6 text-emerald-700 leading-snug">Tuyệt vời!</h2>
+            <button id="btnRewardContinue" class="w-full py-4 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all uppercase border-b-4 bg-emerald-500 hover:bg-emerald-600 border-emerald-700 active:border-b-0 active:mt-1">
+                Đi tiếp nào!
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL CHIẾN THẮNG / THUA -->
+    <div id="modalOverlay" class="hidden absolute inset-0 z-[55] bg-white/60 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-3xl p-8 shadow-2xl text-center max-w-md border-8 transform transition-transform scale-95" id="modalContent">
+            <div id="modalEmoji" class="text-6xl mb-3 animate-bounce-slow">🏆</div>
+            <h2 id="modalTitle" class="text-3xl font-black mb-2 uppercase">Tuyệt Đỉnh!</h2>
+            <p id="modalDesc" class="text-slate-600 font-bold mb-6 text-lg leading-tight">Mô tả</p>
+            <button onclick="resetBoard()" id="modalBtn" class="w-full py-3 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all uppercase border-b-4 active:border-b-0 active:mt-1">
+                Chơi Lại
+            </button>
+        </div>
+    </div>
+
+    <!-- TOAST THÔNG BÁO LỖI -->
+    <div id="warningToastContainer" class="hidden absolute inset-0 z-[70] flex items-center justify-center pointer-events-none">
+        <div id="warningToastMessage" class="bg-rose-500 text-white font-bold text-xl px-8 py-4 rounded-full shadow-2xl border-4 border-white text-center animate-bounce">
+            Cảnh báo!
+        </div>
+    </div>
+
+    <script>
+        // --- HỆ THỐNG TẠO ÂM THANH VÀ VỖ TAY (AUDIO CONTEXT) ---
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        let noiseBuffer;
+
+        function unlockAudio() {
+            try {
+                if (!AudioContextClass) return;
+                if (!audioCtx) audioCtx = new AudioContextClass();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch(e) {}
+        }
+
+        function playTone(freq, type, duration, vol=0.1) {
+            try {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playPingSound() {
+            playTone(880, 'sine', 0.2, 0.2); 
+            setTimeout(() => playTone(1108.73, 'sine', 0.4, 0.2), 100); 
+        }
+
+        function playWinSound() {
+            playTone(523.25, 'triangle', 0.3, 0.15); 
+            setTimeout(() => playTone(659.25, 'triangle', 0.3, 0.15), 150); 
+            setTimeout(() => playTone(783.99, 'triangle', 0.4, 0.15), 300); 
+            setTimeout(() => {
+                playTone(1046.50, 'triangle', 0.8, 0.15); 
+                playTone(880, 'sine', 0.8, 0.15); 
+            }, 450);
+        }
+
+        function playErrorSound() {
+            playTone(300, 'square', 0.2, 0.1);
+            setTimeout(() => playTone(250, 'square', 0.4, 0.1), 150);
+        }
+
+        function playApplauseSound() {
+            try {
+                if (!audioCtx) return;
+                if (!noiseBuffer) {
+                    const bufferSize = audioCtx.sampleRate * 2;
+                    noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = Math.random() * 2 - 1;
+                    }
+                }
+                const now = audioCtx.currentTime;
+                // Tạo 40 tiếng vỗ tay rải rác trong 2 giây
+                for (let i = 0; i < 40; i++) {
+                    const timeOffset = Math.random() * 2.0;
+                    const noiseSource = audioCtx.createBufferSource();
+                    noiseSource.buffer = noiseBuffer;
+                    const noiseFilter = audioCtx.createBiquadFilter();
+                    noiseFilter.type = 'bandpass';
+                    noiseFilter.frequency.value = Math.random() * 800 + 800; // 800 - 1600 Hz
+                    const noiseEnvelope = audioCtx.createGain();
+                    
+                    noiseSource.connect(noiseFilter);
+                    noiseFilter.connect(noiseEnvelope);
+                    noiseEnvelope.connect(audioCtx.destination);
+
+                    noiseEnvelope.gain.setValueAtTime(0, now + timeOffset);
+                    noiseEnvelope.gain.linearRampToValueAtTime(1, now + timeOffset + 0.01);
+                    noiseEnvelope.gain.exponentialRampToValueAtTime(0.01, now + timeOffset + 0.15);
+                    
+                    noiseSource.start(now + timeOffset);
+                    noiseSource.stop(now + timeOffset + 0.2);
+                }
+            } catch (e) {}
+        }
+
+        function safeConfetti(options) {
+            if (typeof confetti !== 'undefined') {
+                try { confetti(options); } catch (e) {}
+            }
+        }
+
+        // --- GAME STATE ---
+        const BOARD_SIZE = 8;
+        const CELL_SIZE = 100 / BOARD_SIZE;
+        const MAX_COMMANDS = 24; 
+        
+        let bot = { x: 0, y: 0, angle: 0 };
+        let startPos = { x: 0, y: 0, angle: 0 };
+        
+        // Bộ nội dung mặc định ĐÃ CẬP NHẬT theo yêu cầu
+        let targetTypes = [
+            { id: 0, mapImg: 'target-1.png', rewardImg: 'thuong-1.png', text: 'Cảm ơn bạn đã nhặt rác để làm sạch môi trường.' },
+            { id: 1, mapImg: 'target-2.png', rewardImg: 'thuong-2.png', text: 'Tuyệt quá, chúc mừng bạn có một mầm xanh.' },
+            { id: 2, mapImg: 'target-3.png', rewardImg: 'thuong-3.png', text: 'Tuyệt vời, nhờ có bạn, cây xanh sẽ mau lớn.' }
+        ];
+        let obstacleImgs = ['obstacle-1.png', 'obstacle-2.png', 'obstacle-3.png'];
+        
+        let currentTargetBrush = 0;
+        let currentObstacleBrush = 0;
+
+        let targets = [{ x: 7, y: 7, typeId: 0 }];
+        let collectedTargets = [];
+        let obstacles = [];
+        let commands = [];
+        
+        let editMode = 'none'; 
+        let isExecuting = false;
+        let gameStatus = 'idle';
+        
+        let isDrawing = false;
+        let sketchPath = [];
+
+        // --- DOM ELEMENTS ---
+        const gridContainer = document.getElementById('gridContainer');
+        const sunbotEl = document.getElementById('sunbot');
+        const sketchPolyline = document.getElementById('sketchPolyline');
+        const btnPlay = document.getElementById('btnPlay');
+        
+        const queueC1 = document.getElementById('queueContainer');
+        const queueC2 = document.getElementById('queueContainer2');
+        const queueC3 = document.getElementById('queueContainer3');
+        const queueW2 = document.getElementById('queueWrapper2');
+        const queueW3 = document.getElementById('queueWrapper3');
+        
+        // --- INITIALIZATION ---
+        function init() {
+            document.body.addEventListener('pointerdown', unlockAudio, { once: true });
+
+            let savedTexts = JSON.parse(localStorage.getItem('sunbotEnvRewards')) || {};
+            targetTypes.forEach((t, i) => { if(savedTexts[i]) t.text = savedTexts[i]; });
+
+            window.addEventListener('resize', syncQueueWidth);
+            renderGrid();
+            updateBotDisplay(false);
+            renderQueue(); 
+            setupInteractions();
+            setupSettings();
+            syncQueueWidth();
+        }
+
+        function syncQueueWidth() {
+            const boardBox = document.getElementById('gridContainer').parentElement;
+            const w = boardBox.offsetWidth;
+            if(w > 0) {
+                document.getElementById('queueWrapper').style.width = w + 'px';
+                queueW2.style.width = w + 'px';
+                queueW3.style.width = w + 'px';
+            }
+        }
+
+        // --- CORE RENDERING ---
+        function renderGrid() {
+            gridContainer.innerHTML = '';
+            for (let row = BOARD_SIZE - 1; row >= 0; row--) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    const cell = document.createElement('div');
+                    const isDark = (row + col) % 2 === 0;
+                    cell.className = `w-full h-full relative flex items-center justify-center select-none touch-none ${isDark ? 'cell-dark' : 'cell-light'}`;
+                    cell.dataset.x = col;
+                    cell.dataset.y = row;
+
+                    const isTarget = targets.find(t => t.x === col && t.y === row);
+                    const isCollected = collectedTargets.some(t => t.x === col && t.y === row);
+                    const isObstacle = obstacles.find(obs => obs.x === col && obs.y === row);
+
+                    if (isTarget || isObstacle) {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'absolute inset-0 pointer-events-none flex items-center justify-center';
+                        const img = document.createElement('img');
+                        
+                        if (isTarget && !isCollected) {
+                            img.src = targetTypes[isTarget.typeId].mapImg;
+                            img.className = 'w-[85%] h-[85%] object-contain drop-shadow-lg pointer-events-none';
+                            img.onerror = () => { wrapper.innerHTML = '<div class="text-3xl drop-shadow-md pointer-events-none animate-bounce-slow">🎯</div>'; };
+                        } else if (isTarget && isCollected) {
+                            img.src = targetTypes[isTarget.typeId].mapImg;
+                            img.className = 'w-[85%] h-[85%] object-contain opacity-30 grayscale pointer-events-none';
+                            img.onerror = () => { wrapper.innerHTML = '<div class="text-3xl opacity-30 grayscale pointer-events-none">🎯</div>'; };
+                        } else if (isObstacle) {
+                            img.src = isObstacle.img;
+                            img.className = 'w-[90%] h-[90%] object-cover drop-shadow-md rounded pointer-events-none';
+                            img.onerror = () => { wrapper.innerHTML = '<div class="text-3xl drop-shadow-md pointer-events-none">🧱</div>'; };
+                        }
+                        wrapper.appendChild(img);
+                        cell.appendChild(wrapper);
+                    }
+                    gridContainer.appendChild(cell);
+                }
+            }
+        }
+
+        function updateBotDisplay(animate = true) {
+            // Tốc độ di chuyển đã được làm chậm lại thành 800ms
+            sunbotEl.style.transitionDuration = animate ? '800ms' : '0ms';
+            sunbotEl.style.left = `${bot.x * CELL_SIZE}%`;
+            sunbotEl.style.bottom = `${bot.y * CELL_SIZE}%`;
+            sunbotEl.style.transform = `rotate(${bot.angle}deg)`;
+        }
+
+        function renderQueue() {
+            queueW2.classList.toggle('hidden', commands.length <= 8);
+            queueW3.classList.toggle('hidden', commands.length <= 16);
+            
+            queueC1.innerHTML = ''; queueC2.innerHTML = ''; queueC3.innerHTML = '';
+            
+            for (let i = 0; i < MAX_COMMANDS; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'w-full h-full bg-slate-50/50 flex items-center justify-center transition-colors';
+                
+                if (i < commands.length) {
+                    const cmd = commands[i];
+                    slot.className = 'w-full h-full bg-blue-500 border-b-[3px] border-blue-700 flex items-center justify-center shadow-inner';
+                    let svgPath = '';
+                    if(cmd === 'F') svgPath = '<path d="M12 19V5M5 12l7-7 7 7"/>';
+                    if(cmd === 'B') svgPath = '<path d="M12 5v14M5 12l7 7 7-7"/>'; 
+                    if(cmd === 'L') svgPath = '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v3.5"/>'; 
+                    if(cmd === 'R') svgPath = '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5V18"/>'; 
+                    slot.innerHTML = `<svg viewBox="0 0 24 24" class="w-[55%] h-[55%] text-white" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">${svgPath}</svg>`;
+                }
+                
+                if (i < 8) queueC1.appendChild(slot);
+                else if (i < 16) queueC2.appendChild(slot);
+                else queueC3.appendChild(slot);
+            }
+            setTimeout(syncQueueWidth, 10);
+        }
+
+        function updateSketch() {
+            if (sketchPath.length === 0) {
+                sketchPolyline.setAttribute('points', '');
+                return;
+            }
+            const pathToDraw = sketchPath.length === 1 ? [sketchPath[0], sketchPath[0]] : sketchPath;
+            const points = pathToDraw.map(p => {
+                const xPercent = (p.x + 0.5) * CELL_SIZE;
+                const yPercent = ((BOARD_SIZE - 1 - p.y) + 0.5) * CELL_SIZE; 
+                return `${xPercent},${yPercent}`;
+            }).join(' ');
+            sketchPolyline.setAttribute('points', points);
+        }
+
+        // --- SKETCH DRAWING: ĐIỀU KIỆN VẼ TỪ SUNBOT ĐƯỢC PHỤC HỒI ---
+        function setupInteractions() {
+            gridContainer.addEventListener('pointerdown', (e) => {
+                const cell = e.target.closest('[data-x]');
+                if (!cell || isExecuting) return;
+                
+                const x = parseInt(cell.dataset.x);
+                const y = parseInt(cell.dataset.y);
+
+                if (editMode === 'none') {
+                    // YÊU CẦU: Trẻ chỉ được vẽ đường dự kiến khi bấm xuất phát đúng TỪ Ô CÓ SUNBOT
+                    if (x === bot.x && y === bot.y && gameStatus === 'idle') {
+                        isDrawing = true;
+                        sketchPath = [{x, y}];
+                        updateSketch();
+                        e.preventDefault(); 
+                        gridContainer.setPointerCapture(e.pointerId); 
+                    }
+                    return; 
+                }
+                handleGridEdit(x, y);
+            });
+
+            gridContainer.addEventListener('pointermove', (e) => {
+                if (!isDrawing) return;
+                const rect = gridContainer.getBoundingClientRect();
+                const cellW = rect.width / BOARD_SIZE;
+                const cellH = rect.height / BOARD_SIZE;
+                const relX = e.clientX - rect.left;
+                const relY = e.clientY - rect.top;
+                
+                if (relX >= 0 && relX <= rect.width && relY >= 0 && relY <= rect.height) {
+                    let col = Math.floor(relX / cellW);
+                    let row = (BOARD_SIZE - 1) - Math.floor(relY / cellH);
+                    col = Math.max(0, Math.min(BOARD_SIZE - 1, col));
+                    row = Math.max(0, Math.min(BOARD_SIZE - 1, row));
+                    
+                    const lastPoint = sketchPath[sketchPath.length - 1];
+                    if (lastPoint && (lastPoint.x !== col || lastPoint.y !== row)) {
+                        if (Math.abs(lastPoint.x - col) + Math.abs(lastPoint.y - row) === 1) {
+                            sketchPath.push({x: col, y: row});
+                            updateSketch();
+                        }
+                    }
+                }
+            });
+
+            gridContainer.addEventListener('pointerup', (e) => {
+                if (isDrawing) { isDrawing = false; gridContainer.releasePointerCapture(e.pointerId); }
+            });
+            gridContainer.addEventListener('pointercancel', (e) => {
+                if (isDrawing) { isDrawing = false; gridContainer.releasePointerCapture(e.pointerId); }
+            });
+        }
+
+        function setMode(mode) {
+            editMode = mode;
+            document.getElementById('settingsOverlay').classList.add('hidden');
+            document.getElementById('settingsPanel').classList.add('hidden');
+            
+            if (mode === 'none') {
+                document.getElementById('editModeBadge').classList.add('hidden');
+                gridContainer.style.cursor = 'default';
+            } else {
+                document.getElementById('editModeBadge').classList.remove('hidden');
+                gridContainer.style.cursor = 'crosshair';
+                let text = '';
+                if(mode === 'start') text = 'Đang sửa: Đặt Sunbot';
+                if(mode === 'target') text = 'Đang cắm: Đích Số ' + (currentTargetBrush + 1);
+                if(mode === 'obstacle') text = 'Đang cắm: Vật Cản ' + (currentObstacleBrush + 1);
+                if(mode === 'erase') text = 'Đang dùng: Cục Tẩy Xóa';
+                document.getElementById('editModeText').innerText = text;
+            }
+        }
+
+        function handleGridEdit(x, y) {
+            if (editMode === 'none') return;
+            
+            if (editMode === 'start') {
+                if (obstacles.some(o => o.x === x && o.y === y) || targets.some(t => t.x === x && t.y === y)) return;
+                startPos = { x, y, angle: bot.angle };
+                bot = { x, y, angle: bot.angle };
+                sketchPath = []; updateSketch(); updateBotDisplay(false);
+            } 
+            else if (editMode === 'target') {
+                if (x === startPos.x && y === startPos.y) return;
+                if (obstacles.some(o => o.x === x && o.y === y)) return;
+                const existing = targets.findIndex(t => t.x === x && t.y === y);
+                if (existing >= 0) targets.splice(existing, 1);
+                else targets.push({ x, y, typeId: currentTargetBrush });
+                renderGrid();
+            }
+            else if (editMode === 'obstacle') {
+                if (x === startPos.x && y === startPos.y) return;
+                if (targets.some(t => t.x === x && t.y === y)) return;
+                const existing = obstacles.findIndex(o => o.x === x && o.y === y);
+                if (existing >= 0) obstacles.splice(existing, 1);
+                else obstacles.push({ x, y, img: obstacleImgs[currentObstacleBrush] });
+                renderGrid();
+            }
+            else if (editMode === 'erase') {
+                targets = targets.filter(t => t.x !== x || t.y !== y);
+                obstacles = obstacles.filter(o => o.x !== x || o.y !== y);
+                renderGrid();
+            }
+        }
+
+        function showWarningToast(msg) {
+            const toast = document.getElementById('warningToastContainer');
+            document.getElementById('warningToastMessage').innerText = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => { toast.classList.add('hidden'); }, 2500);
+        }
+
+        function addCommand(cmd) {
+            unlockAudio();
+            if (isExecuting || gameStatus !== 'idle') return;
+            if (commands.length >= MAX_COMMANDS) {
+                showWarningToast("Hộp lệnh đã đầy!");
+                playErrorSound();
+                return;
+            }
+            commands.push(cmd);
+            renderQueue();
+        }
+
+        function removeLastCommand() {
+            unlockAudio();
+            if (isExecuting || gameStatus !== 'idle' || commands.length === 0) return;
+            commands.pop();
+            renderQueue();
+        }
+
+        // --- POPUP PHẦN THƯỞNG GIỮA CHẶNG ---
+        function showRewardPopup(text, imgSrc) {
+            return new Promise(resolve => {
+                playPingSound();
+                
+                try {
+                    var duration = 2000;
+                    var end = Date.now() + duration;
+                    (function frame() {
+                        safeConfetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#10b981', '#3b82f6', '#f59e0b'] });
+                        safeConfetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#10b981', '#3b82f6', '#f59e0b'] });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
+                } catch(e) {}
+
+                document.getElementById('rewardModalText').innerText = text;
+                document.getElementById('rewardModalImg').src = imgSrc;
+                document.getElementById('rewardModalOverlay').classList.remove('hidden');
+                
+                document.getElementById('btnRewardContinue').onclick = () => {
+                    document.getElementById('rewardModalOverlay').classList.add('hidden');
+                    resolve();
+                };
+            });
+        }
+
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+        async function executeCommands() {
+            unlockAudio();
+            
+            if (isExecuting) return;
+            if (commands.length === 0) {
+                playErrorSound();
+                showWarningToast("Hãy nhập lệnh di chuyển trước nhé!");
+                return;
+            }
+            if (targets.length === 0) {
+                playErrorSound();
+                showWarningToast("Chưa có điểm Đích trên bản đồ!");
+                return;
+            }
+            
+            try {
+                isExecuting = true; 
+                gameStatus = 'idle';
+                sketchPath = []; updateSketch();
+                collectedTargets = []; renderGrid();
+                setMode('none'); 
+
+                btnPlay.disabled = true;
+                document.getElementById('iconPlay').classList.add('hidden');
+                document.getElementById('iconLoading').classList.remove('hidden');
+
+                let currentBot = { ...bot };
+                let hasCrashed = false;
+
+                await sleep(400);
+
+                for (let i = 0; i < commands.length; i++) {
+                    const cmd = commands[i];
+                    let nextX = currentBot.x;
+                    let nextY = currentBot.y;
+                    let nextAngle = currentBot.angle;
+
+                    if (cmd === 'L') {
+                        nextAngle = (currentBot.angle - 90) % 360;
+                        if (nextAngle < 0) nextAngle += 360;
+                    } else if (cmd === 'R') {
+                        nextAngle = (currentBot.angle + 90) % 360;
+                    } else if (cmd === 'F' || cmd === 'B') {
+                        const step = cmd === 'F' ? 1 : -1;
+                        if (currentBot.angle === 0) nextY += step;
+                        else if (currentBot.angle === 90) nextX += step;
+                        else if (currentBot.angle === 180) nextY -= step;
+                        else if (currentBot.angle === 270) nextX -= step;
+                    }
+
+                    if (nextX < 0 || nextX >= BOARD_SIZE || nextY < 0 || nextY >= BOARD_SIZE) {
+                        hasCrashed = true;
+                        playErrorSound();
+                        bot = { x: currentBot.x, y: currentBot.y, angle: nextAngle }; updateBotDisplay();
+                        showModal('lost', 'Ôi chệch hướng mất rồi! Đi ra khỏi bản đồ mất tiêu!');
+                        break;
+                    }
+
+                    const hitObstacle = obstacles.some(obs => obs.x === nextX && obs.y === nextY);
+                    if (hitObstacle) {
+                        hasCrashed = true;
+                        playErrorSound();
+                        bot = { x: nextX, y: nextY, angle: nextAngle }; updateBotDisplay();
+                        showModal('lost', 'Uida! Đụng trúng chướng ngại vật rồi!');
+                        break;
+                    }
+
+                    // Cập nhật giao diện di chuyển
+                    bot = { x: nextX, y: nextY, angle: nextAngle };
+                    currentBot = { ...bot };
+                    updateBotDisplay();
+                    
+                    // CHỜ ĐỦ THỜI GIAN ANIMATION ĐỂ SUNBOT ĐI ĐẾN NƠI MỚI CHECK ĐÍCH
+                    await sleep(850); 
+                    
+                    const hitTargetIndex = targets.findIndex(t => t.x === nextX && t.y === nextY);
+                    if (hitTargetIndex >= 0) {
+                        const targetObj = targets[hitTargetIndex];
+                        if (!collectedTargets.some(c => c.x === targetObj.x && c.y === targetObj.y)) {
+                            collectedTargets.push(targetObj);
+                            renderGrid(); 
+                            
+                            // YÊU CẦU: Dừng 1s trước khi hiển thị phần thưởng
+                            await sleep(1000);
+                            
+                            const tData = targetTypes[targetObj.typeId];
+                            await showRewardPopup(tData.text, tData.rewardImg); // Đợi click nút Đi tiếp
+                            
+                            // YÊU CẦU: Dừng 1s sau khi bấm đi tiếp rồi mới thực hiện lệnh tiếp theo
+                            await sleep(1000);
+                        }
+                    }
+                }
+
+                if (!hasCrashed) {
+                    if (collectedTargets.length === targets.length) {
+                        gameStatus = 'won';
+                        playWinSound();
+                        playApplauseSound(); // THÊM TIẾNG VỖ TAY
+                        
+                        try {
+                            var durationWin = 4000;
+                            var endWin = Date.now() + durationWin;
+                            (function frameWin() {
+                                safeConfetti({ particleCount: 8, angle: 60, spread: 80, origin: { x: 0 }, colors: ['#fde047', '#10b981', '#ef4444', '#3b82f6'] });
+                                safeConfetti({ particleCount: 8, angle: 120, spread: 80, origin: { x: 1 }, colors: ['#fde047', '#10b981', '#ef4444', '#3b82f6'] });
+                                if (Date.now() < endWin) requestAnimationFrame(frameWin);
+                            }());
+                        } catch(e) {}
+
+                        // Bật Modal Chiến Thắng Cuối (Sẽ tự động xử lý chữ 3s bên trong hàm showModal)
+                        showModal('won', '');
+                    } else {
+                        gameStatus = 'lost';
+                        playErrorSound();
+                        showModal('lost', 'Hết lệnh mất rồi mà chưa gom hết đích. Thử lại nhé! 💖');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                // AN TOÀN NHẢ NÚT PLAY TRONG MỌI TRƯỜNG HỢP
+                isExecuting = false;
+                btnPlay.disabled = false;
+                document.getElementById('iconPlay').classList.remove('hidden');
+                document.getElementById('iconLoading').classList.add('hidden');
+            }
+        }
+
+        // --- CÀI ĐẶT & MODALS ---
+        function selectTargetBrush(id) {
+            currentTargetBrush = id;
+            document.querySelectorAll('[id^="btn-target-"]').forEach(el => el.classList.replace('border-blue-500', 'border-transparent'));
+            document.getElementById('btn-target-' + id).classList.replace('border-transparent', 'border-blue-500');
+            
+            document.getElementById('lblRewardEdit').innerText = `Câu khen ngợi cho Đích số ${id + 1}:`;
+            document.getElementById('lblRewardImg').innerText = targetTypes[id].rewardImg;
+            document.getElementById('rewardTextInput').value = targetTypes[id].text;
+        }
+
+        function selectObstacleBrush(id) {
+            currentObstacleBrush = id;
+            document.querySelectorAll('[id^="btn-obstacle-"]').forEach(el => el.classList.replace('border-blue-500', 'border-transparent'));
+            document.getElementById('btn-obstacle-' + id).classList.replace('border-transparent', 'border-blue-500');
+        }
+
+        function saveRewardText() {
+            const newText = document.getElementById('rewardTextInput').value;
+            targetTypes[currentTargetBrush].text = newText;
+            
+            let saved = JSON.parse(localStorage.getItem('sunbotEnvRewards')) || {};
+            saved[currentTargetBrush] = newText;
+            localStorage.setItem('sunbotEnvRewards', JSON.stringify(saved));
+        }
+
+        function showModal(type, msg) {
+            gameStatus = type;
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            const emojiEl = document.getElementById('modalEmoji');
+            const titleEl = document.getElementById('modalTitle');
+            const descEl = document.getElementById('modalDesc');
+            const btnEl = document.getElementById('modalBtn');
+            
+            // Đặt lại hiển thị ban đầu
+            btnEl.classList.remove('hidden', 'animate-fade-in');
+            descEl.classList.remove('hidden');
+
+            if (type === 'won') {
+                emojiEl.innerText = '🏆';
+                // THAY ĐỔI TIÊU ĐỀ CHIẾN THẮNG THEO YÊU CẦU
+                titleEl.innerText = 'Chúc mừng nhà kiến tạo xanh nhí!';
+                titleEl.className = 'text-2xl lg:text-3xl font-black mb-2 uppercase text-emerald-600 leading-snug';
+                content.className = 'bg-white rounded-3xl p-8 shadow-2xl text-center max-w-md border-8 transform transition-transform scale-95 border-emerald-400';
+                
+                descEl.classList.add('hidden'); // Ẩn mô tả khi thắng
+                btnEl.classList.add('hidden'); // Ẩn nút đi
+                
+                // YÊU CẦU: Hiện nút chơi lại sau 3s với hiệu ứng mờ dần
+                btnEl.innerText = 'Chơi Lại Nhé!';
+                btnEl.className = 'w-full py-3 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all uppercase border-b-4 active:border-b-0 active:mt-1 bg-amber-500 hover:bg-amber-600 border-amber-700 hidden opacity-0';
+                
+                setTimeout(() => {
+                    btnEl.classList.remove('hidden');
+                    // Sử dụng timeout ngắn để trình duyệt nhận diện display:block trước khi chạy animation
+                    setTimeout(() => btnEl.classList.add('animate-fade-in'), 50);
+                }, 3000);
+
+            } else {
+                // Xử lý khi thua cuộc
+                emojiEl.innerText = '🥺';
+                titleEl.innerText = 'Thử Lại Nào!';
+                titleEl.className = 'text-2xl lg:text-3xl font-black mb-2 uppercase text-rose-500';
+                content.className = 'bg-white rounded-3xl p-6 shadow-2xl text-center max-w-sm border-8 transform transition-transform scale-95 border-rose-400';
+                
+                descEl.innerText = msg;
+                
+                btnEl.innerText = 'Sửa Lệnh';
+                btnEl.className = 'w-full py-3 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all uppercase border-b-4 active:border-b-0 active:mt-1 bg-blue-500 hover:bg-blue-600 border-blue-700';
+            }
+            
+            overlay.classList.remove('hidden');
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+        }
+
+        function resetBoard() {
+            bot = { ...startPos }; gameStatus = 'idle'; collectedTargets = [];
+            sketchPath = []; updateSketch(); updateBotDisplay(false); renderGrid();
+            
+            isExecuting = false;
+            btnPlay.disabled = false;
+            document.getElementById('iconPlay').classList.remove('hidden');
+            document.getElementById('iconLoading').classList.add('hidden');
+            
+            const content = document.getElementById('modalContent');
+            content.classList.remove('scale-100'); content.classList.add('scale-95');
+            setTimeout(() => { document.getElementById('modalOverlay').classList.add('hidden'); }, 150);
+        }
+
+        function setupSettings() {
+            document.getElementById('btnSettingsToggle').onclick = () => {
+                document.getElementById('settingsOverlay').classList.remove('hidden');
+                document.getElementById('settingsPanel').classList.remove('hidden');
+                selectTargetBrush(currentTargetBrush); 
+            };
+            const close = () => {
+                document.getElementById('settingsOverlay').classList.add('hidden');
+                document.getElementById('settingsPanel').classList.add('hidden');
+            };
+            document.getElementById('btnSettingsClose').onclick = close;
+            document.getElementById('settingsOverlay').onclick = close;
+        }
+
+        init();
+    </script>
+</body>
+</html>
