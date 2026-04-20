@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sunbot - Trạm Cảm Xúc</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body {
+            user-select: none; -webkit-user-select: none; touch-action: none; overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #fdf4ff; /* fuchsia-50 */
+            background-image: radial-gradient(circle at top left, #fae8ff 0%, #f3e8ff 100%);
+        }
+
+        #rotate-overlay { display: none; }
+        @media screen and (orientation: portrait) {
+            #rotate-overlay { display: flex; }
+            #appBody { display: none !important; }
+        }
+
+        .btn-game { transition: all 0.15s ease-out; }
+        .btn-game:active { transform: translateY(6px); border-bottom-width: 0px !important; margin-top: 6px; }
+        .btn-game:disabled { opacity: 0.5; cursor: not-allowed; transform: none; border-bottom-width: 4px !important; margin-top: 0px; }
+
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6%); }
+        }
+        .animate-bounce-slow { animation: bounce-slow 2s infinite ease-in-out; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px) rotate(-3deg); }
+            50% { transform: translateX(8px) rotate(3deg); }
+            75% { transform: translateX(-8px) rotate(-3deg); }
+        }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+
+        /* Emotion Buttons Flat 3D */
+        .emotion-btn {
+            position: relative;
+            border-radius: 50%;
+            transition: all 0.15s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            border-bottom-width: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), inset 0 4px 6px rgba(255,255,255,0.4);
+            aspect-ratio: 1 / 1;
+            width: 100%;
+            max-width: 110px;
+        }
+        .emotion-btn:active {
+            transform: translateY(8px);
+            border-bottom-width: 0px;
+            margin-top: 8px;
+            box-shadow: inset 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        /* Card Tình huống */
+        .situation-card {
+            background: linear-gradient(145deg, #ffffff, #f5f3ff);
+            box-shadow: 0 20px 40px rgba(139, 92, 246, 0.15), inset 0 2px 10px rgba(255,255,255,0.8);
+            border: 8px solid #ede9fe; /* violet-100 */
+        }
+    </style>
+</head>
+<body class="w-full h-screen flex-row overflow-hidden text-slate-800" onpointerdown="unlockAudio()">
+
+    <!-- ÉP XOAY NGANG -->
+    <div id="rotate-overlay" class="fixed inset-0 bg-violet-600 z-[9999] flex-col items-center justify-center text-white p-6 text-center">
+        <svg class="w-24 h-24 mb-6 animate-pulse" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 2v6h6M2 12A10 10 0 0 1 17 3.2L22 8M8 22v-6H2M22 12A10 10 0 0 1 7 20.8L2 16"></path></svg>
+        <h1 class="text-3xl font-black mb-4 uppercase">Xoay ngang màn hình</h1>
+        <p class="text-lg font-medium opacity-90">Vui lòng xoay ngang thiết bị để có không gian chơi tốt nhất!</p>
+    </div>
+
+    <!-- MÀN HÌNH MENU CHỌN LEVEL -->
+    <div id="levelMenuOverlay" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[80] flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-[2rem] p-8 shadow-2xl border-[6px] border-violet-400 w-full max-w-4xl text-center flex flex-col items-center animate-fade-in">
+            <h1 class="text-3xl lg:text-5xl font-black text-violet-600 mb-2 uppercase tracking-wide">Trạm Cảm Xúc</h1>
+            <p class="text-slate-500 font-bold mb-10 text-lg">Cùng Sunbot thấu hiểu và xử lý cảm xúc thật khéo léo nhé!</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-3xl" id="levelButtonsContainer">
+                <!-- Nút Level được tạo bằng JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- APP CHÍNH -->
+    <div id="appBody" class="w-full h-full flex flex-row relative bg-white/20 backdrop-blur-sm">
+
+        <!-- HEADER BUTTONS (Chỉ còn nút Chọn Bài) -->
+        <div class="absolute top-3 right-3 z-[60] flex gap-3">
+            <button onclick="showLevelMenu()" class="p-2.5 bg-white/90 rounded-full shadow-md border-2 border-violet-100 text-violet-600 hover:bg-violet-50 transition-all active:scale-95 font-black text-sm flex items-center gap-2" title="Danh sách bài">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>
+                CHỌN BÀI
+            </button>
+        </div>
+
+        <!-- CỘT TRÁI: SÂN KHẤU TÌNH HUỐNG (GAME AREA) -->
+        <div class="flex-1 min-w-0 h-full flex flex-col p-3 lg:p-4 relative items-center justify-center">
+            
+            <!-- TIÊU ĐỀ -->
+            <div id="levelTitle" class="shrink-0 bg-white/90 backdrop-blur-md px-6 py-2 mb-4 rounded-full border-4 border-violet-100 text-violet-600 font-black text-xl lg:text-2xl shadow-md tracking-wide uppercase z-10 flex items-center gap-2">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-violet-500"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                <span id="titleText">TRẠM CẢM XÚC</span>
+            </div>
+
+            <!-- BỨC TRANH TÌNH HUỐNG -->
+            <div class="relative w-full max-w-[60vh] flex-1 min-h-0 flex flex-col justify-center items-center mb-6">
+                <div class="situation-card w-full h-full rounded-[2.5rem] overflow-hidden relative flex flex-col items-center justify-center animate-fade-in group">
+                    <div class="absolute inset-0 bg-violet-900/5 pointer-events-none"></div>
+                    <!-- Ảnh tình huống -->
+                    <img id="situationImg" src="sit-1.png" class="w-full h-full object-contain p-4 drop-shadow-xl z-10 transition-transform duration-500 group-hover:scale-105" 
+                         onerror="this.style.display='none'; document.getElementById('fallbackEmoji').style.display='flex';" />
+                    <!-- Fallback Emoji nếu không có ảnh -->
+                    <div id="fallbackEmoji" class="absolute inset-0 hidden items-center justify-center text-[8rem] sm:text-[10rem] drop-shadow-2xl animate-bounce-slow z-0">
+                        🧸💧
+                    </div>
+                </div>
+            </div>
+
+            <!-- KHAY CHỌN CẢM XÚC BÊN DƯỚI BỨC TRANH -->
+            <div class="w-full max-w-[65vh] flex justify-center gap-4 sm:gap-6 px-2 shrink-0" id="emotionsContainer">
+                <!-- Nút cảm xúc sinh ra từ JS -->
+            </div>
+            
+        </div>
+
+        <!-- CỘT PHẢI: ĐIỀU KHIỂN & LỜI CÔ DẶN -->
+        <div class="w-[240px] lg:w-[320px] h-full bg-white/90 backdrop-blur-md border-l-4 border-violet-200 flex flex-col p-4 lg:p-6 shadow-2xl shrink-0 z-20 justify-between overflow-y-auto">
+            
+            <!-- KHUNG CÂU HỎI DẪN DẮT -->
+            <div class="w-full bg-fuchsia-50 rounded-2xl p-5 shadow-sm border-2 border-fuchsia-200 flex flex-col items-center gap-3 shrink-0 mb-4 text-center">
+                <div class="text-4xl animate-bounce-slow drop-shadow-md">👩‍🏫</div>
+                <div id="levelQuestionText" class="text-sm lg:text-base font-bold text-slate-700 leading-relaxed">
+                    Cô giáo sẽ đọc nhiệm vụ ở đây nhé!
+                </div>
+            </div>
+
+            <!-- SUNBOT MASCOT -->
+            <div class="flex-1 w-full flex items-center justify-center min-h-[150px]">
+                <div class="w-3/4 max-w-[180px] aspect-square relative animate-bounce-slow" id="sunbotMascot">
+                    <img src="logo-sunbot.png" alt="Sunbot" class="w-full h-full object-contain drop-shadow-2xl" onerror="this.onerror=null; this.outerHTML='<div class=\'w-full h-full bg-amber-400 rounded-full border-4 border-amber-600 shadow-xl flex items-center justify-center font-black text-white text-3xl\'>BOT</div>';"/>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL CHIẾN THẮNG KÈM BÀI HỌC ĐÚC RÚT -->
+    <div id="modalOverlay" class="hidden absolute inset-0 z-[80] bg-white/70 backdrop-blur-sm flex items-center justify-center p-4 transition-opacity">
+        <div class="bg-white rounded-3xl p-8 shadow-[0_20px_60px_rgba(0,0,0,0.4)] text-center max-w-md border-8 transform transition-transform scale-95 border-violet-400" id="modalContent">
+            <div id="modalEmoji" class="text-6xl mb-3 animate-bounce-slow drop-shadow-lg">🌟</div>
+            <h2 id="modalTitle" class="text-3xl font-black mb-4 uppercase text-violet-600 leading-snug">Chính Xác!</h2>
+            
+            <!-- Lời khuyên / Bài học -->
+            <p id="modalDesc" class="text-fuchsia-800 font-bold mb-8 text-base lg:text-lg leading-relaxed bg-fuchsia-50 p-5 rounded-2xl border border-fuchsia-200 shadow-inner">Mô tả bài học</p>
+            
+            <button onclick="loadNextLevel()" id="modalBtn" class="w-full py-4 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all uppercase border-b-4 active:border-b-0 active:mt-1 bg-violet-500 hover:bg-violet-600 border-violet-700">
+                BÀI TIẾP THEO
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // 🔴 KHU VỰC DÀNH CHO ĐỘI NỘI DUNG SỬA BÀI HỌC TRƯỚC KHI UP LÊN MẠNG 🔴
+        // =====================================================================
+        const emotionLevels = [
+            {
+                id: 1,
+                title: "BÀI 1: BẠN GẤU BỊ NGÃ",
+                question: "Trời ơi, bạn Gấu đang chạy thì bị vấp ngã đau quá! Theo bé, lúc này bạn Gấu đang cảm thấy thế nào?",
+                lesson: "Đúng rồi! Bạn Gấu đang rất BUỒN và đau. Bé hãy chạy lại đỡ bạn Gấu dậy và thổi phù cho bạn hết đau nhé!",
+                img: "sit-1.png", // Tên file ảnh tương ứng (bỏ vào cùng thư mục)
+                fallbackEmoji: "🧸💧", // Hình hiện tạm nếu không có ảnh
+                correctEmotion: "sad", // Đáp án đúng (sad / happy / angry / surprised)
+                options: ['happy', 'sad', 'angry'] // 3 biểu tượng hiện ra cho trẻ chọn
+            },
+            {
+                id: 2,
+                title: "BÀI 2: ĐỒ CHƠI BỊ HỎNG",
+                question: "Lâu đài cát mà Thỏ vừa xây xong bị một bạn vô tình làm đổ mất rồi. Bạn Thỏ sẽ cảm thấy sao nhỉ?",
+                lesson: "Chính xác! Thỏ đang rất TỨC GIẬN. Nhưng không sao, chúng mình cùng hít thở sâu và giúp Thỏ xây lại lâu đài to hơn nhé!",
+                img: "sit-2.png",
+                fallbackEmoji: "🏰💥",
+                correctEmotion: "angry",
+                options: ['sad', 'angry', 'surprised']
+            },
+            {
+                id: 3,
+                title: "BÀI 3: MÓN QUÀ BẤT NGỜ",
+                question: "Hôm nay là sinh nhật Cún, mẹ tặng Cún một hộp quà siêu to khổng lồ. Cún sẽ cảm thấy thế nào ta?",
+                lesson: "Chuẩn luôn! Cún đang rất VUI VẺ và hạnh phúc. Chúng mình cùng vỗ tay hát chúc mừng sinh nhật Cún nào!",
+                img: "sit-3.png",
+                fallbackEmoji: "🎁✨",
+                correctEmotion: "happy",
+                options: ['happy', 'angry', 'sad']
+            }
+        ];
+        // =====================================================================
+
+
+        const EMOTIONS = {
+            happy: { emoji: '😄', bg: 'bg-emerald-400', border: 'border-emerald-600' },
+            sad: { emoji: '😢', bg: 'bg-blue-400', border: 'border-blue-600' },
+            angry: { emoji: '😡', bg: 'bg-rose-500', border: 'border-rose-700' },
+            surprised: { emoji: '😲', bg: 'bg-amber-400', border: 'border-amber-600' }
+        };
+
+        // --- HỆ THỐNG TẠO ÂM THANH (AUDIO CONTEXT) ---
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        let audioCtx, noiseBuffer;
+
+        function unlockAudio() {
+            try {
+                if (!AudioContextClass) return;
+                if (!audioCtx) audioCtx = new AudioContextClass();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch(e) {}
+        }
+
+        ['click', 'touchstart', 'touchend', 'pointerdown'].forEach(evt => {
+            document.addEventListener(evt, unlockAudio, { passive: true });
+        });
+
+        function playTone(freq, type, duration, vol=0.1) {
+            try {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playPingSound() {
+            playTone(880, 'sine', 0.15, 0.2); 
+            setTimeout(() => playTone(1108.73, 'sine', 0.3, 0.2), 100); 
+        }
+
+        function playWinSound() {
+            playTone(523.25, 'triangle', 0.3, 0.15); setTimeout(() => playTone(659.25, 'triangle', 0.3, 0.15), 150); 
+            setTimeout(() => playTone(783.99, 'triangle', 0.4, 0.15), 300); 
+            setTimeout(() => { playTone(1046.50, 'triangle', 0.8, 0.15); playTone(880, 'sine', 0.8, 0.15); }, 450);
+        }
+
+        function playErrorSound() {
+            playTone(200, 'sawtooth', 0.2, 0.1); 
+            setTimeout(() => playTone(150, 'sawtooth', 0.4, 0.1), 150);
+        }
+
+        function playApplauseSound() {
+            try {
+                if (!audioCtx) return;
+                if (!noiseBuffer) {
+                    const bufferSize = audioCtx.sampleRate * 2; noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                }
+                const now = audioCtx.currentTime;
+                for (let i = 0; i < 40; i++) {
+                    const timeOffset = Math.random() * 2.0;
+                    const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = noiseBuffer;
+                    const noiseFilter = audioCtx.createBiquadFilter(); noiseFilter.type = 'bandpass'; noiseFilter.frequency.value = Math.random() * 800 + 800;
+                    const noiseEnvelope = audioCtx.createGain();
+                    noiseSource.connect(noiseFilter); noiseFilter.connect(noiseEnvelope); noiseEnvelope.connect(audioCtx.destination);
+                    noiseEnvelope.gain.setValueAtTime(0, now + timeOffset); noiseEnvelope.gain.linearRampToValueAtTime(1, now + timeOffset + 0.01); noiseEnvelope.gain.exponentialRampToValueAtTime(0.01, now + timeOffset + 0.15);
+                    noiseSource.start(now + timeOffset); noiseSource.stop(now + timeOffset + 0.2);
+                }
+            } catch (e) {}
+        }
+
+        function safeConfetti(options) { if (typeof confetti !== 'undefined') { try { confetti(options); } catch (e) {} } }
+
+        // --- GAME STATE ---
+        let currentLevelIndex = 0;
+        let isProcessing = false;
+
+        // --- INITIALIZATION ---
+        function init() {
+            showLevelMenu();
+        }
+
+        function showLevelMenu() {
+            const menu = document.getElementById('levelMenuOverlay');
+            const container = document.getElementById('levelButtonsContainer');
+            container.innerHTML = '';
+            
+            emotionLevels.forEach((lvl, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'w-full aspect-square bg-white rounded-3xl border-[6px] border-violet-200 flex flex-col items-center justify-center p-4 hover:border-violet-500 hover:scale-105 active:scale-95 transition-all shadow-lg group';
+                btn.innerHTML = `
+                    <div class="w-16 h-16 bg-violet-100 text-violet-600 rounded-full flex items-center justify-center text-3xl font-black mb-3 group-hover:bg-violet-500 group-hover:text-white transition-colors">${lvl.id}</div>
+                    <h3 class="font-black text-lg text-slate-700 uppercase">${lvl.title}</h3>
+                `;
+                btn.onclick = () => loadLevel(idx);
+                container.appendChild(btn);
+            });
+            menu.classList.remove('hidden');
+        }
+
+        function loadLevel(index) {
+            currentLevelIndex = index;
+            isProcessing = false;
+            document.getElementById('levelMenuOverlay').classList.add('hidden');
+            
+            const lvl = emotionLevels[index];
+            document.getElementById('titleText').innerText = lvl.title;
+            document.getElementById('levelQuestionText').innerText = lvl.question;
+            
+            // Setup Image & Fallback
+            const imgEl = document.getElementById('situationImg');
+            const fbEl = document.getElementById('fallbackEmoji');
+            imgEl.style.display = 'block';
+            fbEl.style.display = 'none';
+            imgEl.src = lvl.img;
+            fbEl.innerText = lvl.fallbackEmoji;
+            
+            // Setup Options
+            const container = document.getElementById('emotionsContainer');
+            container.innerHTML = '';
+            
+            // Đảo vị trí ngẫu nhiên để trẻ không học vẹt vị trí
+            const shuffledOptions = [...lvl.options].sort(() => Math.random() - 0.5);
+
+            shuffledOptions.forEach(emotionKey => {
+                const data = EMOTIONS[emotionKey];
+                const btn = document.createElement('button');
+                btn.className = `btn-game emotion-btn ${data.bg} ${data.border}`;
+                btn.innerHTML = `<span class="drop-shadow-md pointer-events-none">${data.emoji}</span>`;
+                btn.onclick = () => handleEmotionClick(emotionKey, btn);
+                container.appendChild(btn);
+            });
+        }
+
+        // --- GAME PLAY LOGIC ---
+        function handleEmotionClick(emotionKey, btnEl) {
+            if (isProcessing) return;
+            unlockAudio();
+            
+            const lvl = emotionLevels[currentLevelIndex];
+            
+            if (emotionKey === lvl.correctEmotion) {
+                // ĐÚNG
+                isProcessing = true;
+                playPingSound();
+                
+                // Nổi bật nút bấm
+                btnEl.classList.add('scale-110', 'ring-8', 'ring-white/50');
+                
+                // Pháo hoa tung tóe
+                try {
+                    var duration = 2000; var end = Date.now() + duration;
+                    (function frame() {
+                        safeConfetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#c084fc', '#e879f9', '#f472b6'] });
+                        safeConfetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#c084fc', '#e879f9', '#f472b6'] });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
+                } catch(e) {}
+
+                setTimeout(() => {
+                    handleWinLevel();
+                }, 1000);
+
+            } else {
+                // SAI
+                playErrorSound();
+                btnEl.classList.add('animate-shake', 'grayscale', 'opacity-60');
+                setTimeout(() => {
+                    btnEl.classList.remove('animate-shake', 'grayscale', 'opacity-60');
+                }, 500);
+            }
+        }
+
+        function handleWinLevel() {
+            playWinSound();
+            playApplauseSound();
+            
+            document.getElementById('sunbotMascot').classList.remove('animate-bounce-slow');
+            document.getElementById('sunbotMascot').classList.add('animate-bounce');
+
+            const lvl = emotionLevels[currentLevelIndex];
+            
+            document.getElementById('modalDesc').innerText = lvl.lesson;
+            document.getElementById('modalOverlay').classList.remove('hidden');
+            
+            const btnEl = document.getElementById('modalBtn');
+            btnEl.classList.add('hidden', 'opacity-0');
+            
+            if (currentLevelIndex < emotionLevels.length - 1) {
+                btnEl.innerText = 'BÀI TIẾP THEO!';
+                btnEl.onclick = () => {
+                    document.getElementById('modalOverlay').classList.add('hidden');
+                    loadLevel(currentLevelIndex + 1);
+                };
+            } else {
+                btnEl.innerText = 'CHƠI LẠI TỪ ĐẦU!';
+                btnEl.onclick = () => { 
+                    document.getElementById('modalOverlay').classList.add('hidden'); 
+                    showLevelMenu(); 
+                };
+            }
+            
+            setTimeout(() => {
+                btnEl.classList.remove('hidden');
+                setTimeout(() => btnEl.classList.add('animate-fade-in'), 50);
+            }, 2000); 
+        }
+
+        init();
+    </script>
+</body>
+</html>
